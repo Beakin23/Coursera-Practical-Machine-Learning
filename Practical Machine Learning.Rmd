@@ -1,0 +1,113 @@
+---
+title: "Practical Machine Learning"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Executive Summary
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. In this project, the project involves using data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website [here](http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset). 
+
+Note: The [Training](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) and [Testing](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv) datasets should both be saved in the working directory.
+
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the *training* dataset. The *training* dataset will be used to create the model, which will then be used to predict the outcomes in the *testing* dataset.
+
+3 modelling approaches will be tested, and the best method will be selected to apply to the *testing* dataset. The models are:
+1. Decision Tree
+2. Random Forest
+3. Gradient Boosting
+
+
+# Data Processing
+Firstly, load the dataset and necessary R packages.
+
+```{r}
+training_init <- read.csv("pml-training.csv")
+testing_final <- read.csv("pml-testing.csv")
+
+library(caret)
+library(fscaret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(e1071)
+```
+
+Remove variables with missing values (threshold at 95%) and variables with near zero variance.
+```{r}
+na <- sapply(training_init, function(x) mean(is.na(x))) > 0.95 # Remove variables with missing values
+training_init <- training_init[,na == FALSE]
+testing_final <- testing_final[,na == FALSE]
+```
+```{r}
+nzv <- nearZeroVar(training_init) # Remove variables with near zero variance
+training_init <- training_init[,-nzv]
+testing_final <- testing_final[,-nzv]
+```
+
+Also, the first 7 variables are not numeric and so will not affect Classe. Hence these should also be removed
+
+```{r}
+training_init <- training_init[, -(1:7)]
+testing_final <- testing_final[, -(1:7)]
+```
+
+```{r}
+inTrain <- createDataPartition(training_init$classe, p=0.6, list=FALSE)
+training <- training_init[inTrain,]
+testing <- training_init[-inTrain,]
+testing$classe <- as.factor(testing$classe)
+```
+
+# Prediction Models
+
+### 1. Decision Tree
+```{r}
+dt <- train(classe ~ ., data = training, method="rpart")
+dt_prediction <- predict(dt, testing)
+dt_cm <- confusionMatrix(dt_prediction, testing$classe)
+dt_cm
+```
+
+### 2. Random Forest
+```{r}
+control_rf <- trainControl(method="cv", number=3, verboseIter=FALSE)
+rf <- train(classe ~ ., data = training, method = "rf", trControl=control_rf)
+rf_prediction <- predict(rf, testing)
+rf_cm <- confusionMatrix(rf_prediction, testing$classe)
+rf_cm
+```
+
+### 3. Gradient Boosting
+```{r}
+control_gbm <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+gbm <- train(classe ~ ., data = training, method = "gbm", verbose = FALSE, trControl = control_gbm)
+gbm_prediction <- predict(gbm, testing)
+gbm_cm <- confusionMatrix(gbm_prediction, testing$classe)
+gbm_cm
+```
+
+# Comparing Models
+```{r}
+dt_cm$overall
+```
+```{r}
+rf_cm$overall
+```
+```{r}
+gbm_cm$overall
+```
+
+We can see that the Random Forest model has the highest accuracy, hence this is the selected model.
+
+
+# Predition for Test Data
+```{r}
+final_prediction <- predict(rf, testing_final)
+final_prediction
+```
